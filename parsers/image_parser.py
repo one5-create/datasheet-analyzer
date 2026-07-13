@@ -7,6 +7,7 @@ MIME_MAP = {
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
     ".gif":  "image/gif",
+    ".pdf":  "application/pdf",
 }
 
 

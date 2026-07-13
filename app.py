@@ -87,7 +87,7 @@ T = {
         "warn_cmp": "⚠️ 비교품(교체 후보 부품)을 1개 이상 업로드해주세요.",
         "drag_drop_hint": "PDF · Excel · CSV — 파일을 끌어다 놓거나 클릭하여 선택",
         "schematic_label": "회로도 업로드 (선택사항)",
-        "schematic_hint": "회로도 이미지를 쳊부하면 실제 회로 기반으로 호환성을 더 정밀하게 분석합니다 (PNG · JPG)",
+        "schematic_hint": "회로도 이미지를 첨부하면 실제 회로 기반으로 호환성을 더 정밀하게 분석합니다 (PNG · JPG · PDF)",
         "schematic_badge": "🔌 회로도",
         "parsing_image": "🖼️ `{}` 회로도 읽는 중...",
         "parsing_image_done": "✅ `{}` 완료",
@@ -162,7 +162,7 @@ T = {
         "warn_cmp": "⚠️ Please upload at least one comparison part.",
         "drag_drop_hint": "PDF · Excel · CSV — drag & drop or click to browse",
         "schematic_label": "Upload Circuit Diagram (Optional)",
-        "schematic_hint": "Attach schematic images (PNG · JPG) for circuit-level compatibility analysis",
+        "schematic_hint": "Attach schematic images or PDF (PNG · JPG · PDF) for circuit-level compatibility analysis",
         "schematic_badge": "🔌 Schematic",
         "parsing_image": "🖼️ Reading `{}` schematic...",
         "parsing_image_done": "✅ `{}` done",
@@ -724,7 +724,7 @@ with st.container(border=True):
         unsafe_allow_html=True,
     )
     schematic_files = st.file_uploader(
-        "upload_schematic", type=["png", "jpg", "jpeg", "webp"],
+        "upload_schematic", type=["png", "jpg", "jpeg", "webp", "pdf"],
         accept_multiple_files=True, key="upload_schematic", label_visibility="collapsed",
     )
 uploaded_files = (ref_files or []) + (cmp_files or [])
@@ -766,7 +766,12 @@ else:
         sch_cols = st.columns(min(len(schematic_files), 4))
         for i, sf in enumerate(schematic_files):
             with sch_cols[i % 4]:
-                st.image(sf, caption=sf.name, use_container_width=True)
+                if Path(sf.name).suffix.lower() == ".pdf":
+                    with st.container(border=True):
+                        st.markdown(f"🔴 **{sf.name}**")
+                        st.caption(f"PDF · {sf.size / 1024:.1f} KB")
+                else:
+                    st.image(sf, caption=sf.name, use_container_width=True)
     st.divider()
 
     if st.button(t["btn_analyze"], type="primary", use_container_width=True):
