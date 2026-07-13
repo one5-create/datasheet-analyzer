@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from parsers.pdf_parser import parse_pdf
 from parsers.excel_parser import parse_excel
 from parsers.csv_parser import parse_csv
+from parsers.image_parser import parse_image
 from agent.analyzer import DataSheetAnalyzer
 
 # ── 언어 텍스트 사전 ─────────────────────────────────────
@@ -85,6 +86,11 @@ T = {
         "warn_ref": "⚠️ 기준품(현재 사용 부품)을 업로드해주세요.",
         "warn_cmp": "⚠️ 비교품(교체 후보 부품)을 1개 이상 업로드해주세요.",
         "drag_drop_hint": "PDF · Excel · CSV — 파일을 끌어다 놓거나 클릭하여 선택",
+        "schematic_label": "회로도 업로드 (선택사항)",
+        "schematic_hint": "회로도 이미지를 쳊부하면 실제 회로 기반으로 호환성을 더 정밀하게 분석합니다 (PNG · JPG)",
+        "schematic_badge": "🔌 회로도",
+        "parsing_image": "🖼️ `{}` 회로도 읽는 중...",
+        "parsing_image_done": "✅ `{}` 완료",
         "compat_verdict": {
             "Drop-in Compatible": "✅ 즉시 대체 가능 (Drop-in)",
             "Conditionally Replaceable": "⚠️ 조건부 대체 가능",
@@ -155,6 +161,11 @@ T = {
         "warn_ref": "⚠️ Please upload the reference (currently used) part.",
         "warn_cmp": "⚠️ Please upload at least one comparison part.",
         "drag_drop_hint": "PDF · Excel · CSV — drag & drop or click to browse",
+        "schematic_label": "Upload Circuit Diagram (Optional)",
+        "schematic_hint": "Attach schematic images (PNG · JPG) for circuit-level compatibility analysis",
+        "schematic_badge": "🔌 Schematic",
+        "parsing_image": "🖼️ Reading `{}` schematic...",
+        "parsing_image_done": "✅ `{}` done",
         "compat_verdict": {
             "Drop-in Compatible": "✅ Drop-in Compatible",
             "Conditionally Replaceable": "⚠️ Conditionally Replaceable",
@@ -663,6 +674,8 @@ if "result_lang" not in st.session_state:
     st.session_state.result_lang = "ko"
 if "ref_filenames" not in st.session_state:
     st.session_state.ref_filenames = []
+if "circuit_image_names" not in st.session_state:
+    st.session_state.circuit_image_names = []
 
 # ═══════════════════════════════════════════════════════════
 #  메인
@@ -702,7 +715,18 @@ with col_cmp:
             accept_multiple_files=True, key="upload_cmp", label_visibility="collapsed",
         )
 
-# 합산 파일 목록
+# ── 회로도 업로드 (선택사항) ──────────────────────────────────
+with st.container(border=True):
+    st.markdown(
+        f'<div style="color:#1B5E20;font-weight:800;font-size:1.0rem;margin-bottom:4px">'
+        f'🔌 {t["schematic_label"]}</div>'
+        f'<div style="color:#555;font-size:0.82rem;margin-bottom:4px">{t["schematic_hint"]}</div>',
+        unsafe_allow_html=True,
+    )
+    schematic_files = st.file_uploader(
+        "upload_schematic", type=["png", "jpg", "jpeg", "webp"],
+        accept_multiple_files=True, key="upload_schematic", label_visibility="collapsed",
+    )
 uploaded_files = (ref_files or []) + (cmp_files or [])
 
 if not uploaded_files:
@@ -735,11 +759,20 @@ else:
                     unsafe_allow_html=True,
                 )
                 st.caption(f"{ext} · {f.size / 1024:.1f} KB")
+
+    # 회로도 미리보기
+    if schematic_files:
+        st.markdown(f"**🔌 {t['schematic_badge']}** ({len(schematic_files)})")
+        sch_cols = st.columns(min(len(schematic_files), 4))
+        for i, sf in enumerate(schematic_files):
+            with sch_cols[i % 4]:
+                st.image(sf, caption=sf.name, use_container_width=True)
     st.divider()
 
     if st.button(t["btn_analyze"], type="primary", use_container_width=True):
         parsed_files = []
         roles = []
+        circuit_images = []
         with st.status(t["parsing"], expanded=True) as status:
             for f, role in [(f, "reference") for f in ref_files] + [(f, "comparison") for f in cmp_files]:
                 st.write(t["parsing_file"].format(f.name))
@@ -750,15 +783,35 @@ else:
                     st.write(t["parsing_done"].format(f.name))
                 except Exception as e:
                     st.error(t["parsing_fail"].format(f.name, e)); st.stop()
+            # 회로도 이미지 파싱
+            for f in (schematic_files or []):
+                st.write(t["parsing_image"].format(f.name))
+                suffix = Path(f.name).suffix.lower()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(f.getbuffer())
+                    tmp_path = tmp.name
+                try:
+                    img_data = parse_image(tmp_path)
+                    img_data["file_name"] = f.name
+                    circuit_images.append(img_data)
+                    st.write(t["parsing_image_done"].format(f.name))
+                except Exception as e:
+                    st.error(t["parsing_fail"].format(f.name, e)); st.stop()
+                finally:
+                    os.unlink(tmp_path)
             status.update(label=t["parse_complete"], state="complete")
 
         with st.spinner(t["analyzing"]):
             try:
                 analyzer = DataSheetAnalyzer()
-                result = analyzer.analyze(parsed_files, lang=t["llm_lang"], roles=roles)
+                result = analyzer.analyze(
+                    parsed_files, lang=t["llm_lang"], roles=roles,
+                    circuit_images=circuit_images if circuit_images else None,
+                )
                 st.session_state.result = result
                 st.session_state.result_lang = lang_key
                 st.session_state.ref_filenames = [f.name for f in ref_files]
+                st.session_state.circuit_image_names = [f.name for f in (schematic_files or [])]
             except Exception as e:
                 st.error(t["analyze_err"].format(e)); st.stop()
 

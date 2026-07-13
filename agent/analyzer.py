@@ -69,6 +69,7 @@ Output MUST follow this exact JSON schema:
 
 --- Data Sheet Content ---
 {content}
+{circuit_section}
 """
 
 
@@ -96,12 +97,13 @@ class DataSheetAnalyzer:
         self.client = genai.Client(api_key=api_key)
         self.model  = model
 
-    def analyze(self, parsed_files: list[dict], lang: str = "Korean", roles: list[str] = None) -> dict:
+    def analyze(self, parsed_files: list[dict], lang: str = "Korean",
+                roles: list[str] = None, circuit_images: list[dict] = None) -> dict:
         """파싱된 파일 목록을 받아 Gemini로 비교 분석합니다.
         
         Args:
             roles: 각 파일의 역할 리스트 ("reference" | "comparison").
-                   첫 번째 파일이 기준(reference)이고 나머지는 비교 대상.
+            circuit_images: 회로도 이미지 리스트 [{"file_name", "mime_type", "image_bytes"}].
         """
         if roles is None:
             roles = ["reference"] + ["comparison"] * (len(parsed_files) - 1)
@@ -118,18 +120,46 @@ class DataSheetAnalyzer:
             )
 
         combined_content = "\n\n" + "=" * 60 + "\n\n".join(content_parts)
+
+        # 회로도 이미지 없으면 빈 문자열, 있으면 분석 지시 추가
+        if circuit_images:
+            names = ", ".join(img["file_name"] for img in circuit_images)
+            circuit_section = (
+                f"\n\n--- Circuit Diagram(s): {names} ---\n"
+                "The circuit diagram image(s) are attached to this message.\n"
+                "Using the circuit diagram(s), perform ADDITIONAL analysis:\n"
+                "- Identify which component position(s) correspond to the REFERENCE part\n"
+                "- Evaluate whether the COMPARISON part(s) can replace them IN THIS EXACT CIRCUIT\n"
+                "- Note any circuit-level constraints visible in the schematic "
+                "(voltage rails, surrounding passives, feedback paths, thermal layout, etc.)\n"
+                "- Revise or add to circuit_modifications_required and cautions based on the schematic"
+            )
+        else:
+            circuit_section = ""
+
         prompt = ANALYSIS_PROMPT.format(
             count=len(parsed_files),
             lang=lang,
             content=combined_content,
+            circuit_section=circuit_section,
         )
 
         print(f"  AI 모델로 분석 중...")
+        # 멀티모달 콘텐츠: 텍스트 프롬프트 + 회로도 이미지()
+        contents: list = [types.Part.from_text(text=prompt)]
+        if circuit_images:
+            for img in circuit_images:
+                contents.append(
+                    types.Part.from_bytes(
+                        data=img["image_bytes"],
+                        mime_type=img["mime_type"],
+                    )
+                )
         for attempt in range(3):
             try:
                 response = self.client.models.generate_content(
                     model=self.model,
-                    contents=prompt,
+                    contents=contents,
                     config=types.GenerateContentConfig(
                         temperature=0.2,
                         response_mime_type="application/json",
