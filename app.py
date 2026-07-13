@@ -76,7 +76,7 @@ T = {
         "llm_lang": "Korean",
         "item_label": "항목",
         "ref_label": "기준품",
-        "ref_hint": "현재 회로에 실제 사용 중인 부품을 업로드하세요",
+        "ref_hint": "현재 회로에 실제 사용 중인 부품을 업로드하세요 (1개 이상)",
         "ref_badge": "📌 기준품",
         "cmp_label": "비교품",
         "cmp_hint": "교체 검토 중인 후보 부품을 업로드하세요 (1개 이상)",
@@ -145,7 +145,7 @@ T = {
         "llm_lang": "English",
         "item_label": "Item",
         "ref_label": "Reference",
-        "ref_hint": "Currently used in the circuit — upload one file",
+        "ref_hint": "Currently used in the circuit — upload one or more files",
         "ref_badge": "📌 Reference",
         "cmp_label": "Comparison",
         "cmp_hint": "Replacement candidates — upload one or more files",
@@ -650,8 +650,8 @@ if "result" not in st.session_state:
     st.session_state.result = None
 if "result_lang" not in st.session_state:
     st.session_state.result_lang = "ko"
-if "ref_filename" not in st.session_state:
-    st.session_state.ref_filename = None
+if "ref_filenames" not in st.session_state:
+    st.session_state.ref_filenames = []
 
 # ═══════════════════════════════════════════════════════════
 #  메인
@@ -672,9 +672,9 @@ with col_ref:
             f'<div style="color:#555;font-size:0.82rem;margin-bottom:4px">{t["ref_hint"]}</div>',
             unsafe_allow_html=True,
         )
-        ref_file = st.file_uploader(
+        ref_files = st.file_uploader(
             "upload_ref", type=["pdf", "xlsx", "xls", "csv"],
-            accept_multiple_files=False, key="upload_ref", label_visibility="collapsed",
+            accept_multiple_files=True, key="upload_ref", label_visibility="collapsed",
         )
 
 with col_cmp:
@@ -692,7 +692,7 @@ with col_cmp:
         )
 
 # 합산 파일 목록
-uploaded_files = ([ref_file] if ref_file else []) + (cmp_files or [])
+uploaded_files = (ref_files or []) + (cmp_files or [])
 
 if not uploaded_files:
     st.info(t["info_upload"])
@@ -700,18 +700,18 @@ if not uploaded_files:
         st.info("💡 이전 분석 결과가 아래에 표시됩니다." if lang_key == "ko" else "💡 Previous analysis result is shown below.")
     else:
         st.stop()
-elif not ref_file:
+elif not ref_files:
     st.warning(t["warn_ref"]); st.stop()
 elif not cmp_files:
     st.warning(t["warn_cmp"]); st.stop()
 else:
     # 업로드된 파일 미리보기
     st.divider()
-    total = 1 + len(cmp_files)
+    total = len(ref_files) + len(cmp_files)
     st.subheader(f"{t['uploaded_files']} ({total})")
     preview_cols = st.columns(total)
     for i, (f, role_badge, badge_class) in enumerate(
-        [(ref_file, t["ref_badge"], "badge-ref")] +
+        [(f, t["ref_badge"], "badge-ref") for f in ref_files] +
         [(f, t["cmp_badge"], "badge-cmp") for f in cmp_files]
     ):
         with preview_cols[i]:
@@ -730,7 +730,7 @@ else:
         parsed_files = []
         roles = []
         with st.status(t["parsing"], expanded=True) as status:
-            for f, role in [(ref_file, "reference")] + [(f, "comparison") for f in cmp_files]:
+            for f, role in [(f, "reference") for f in ref_files] + [(f, "comparison") for f in cmp_files]:
                 st.write(t["parsing_file"].format(f.name))
                 try:
                     data = parse_uploaded(f)
@@ -747,7 +747,7 @@ else:
                 result = analyzer.analyze(parsed_files, lang=t["llm_lang"], roles=roles)
                 st.session_state.result = result
                 st.session_state.result_lang = lang_key
-                st.session_state.ref_filename = ref_file.name
+                st.session_state.ref_filenames = [f.name for f in ref_files]
             except Exception as e:
                 st.error(t["analyze_err"].format(e)); st.stop()
 
@@ -761,7 +761,7 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
     if "raw_response" in result:
         st.markdown(result["raw_response"]); return
 
-    ref_name = st.session_state.get("ref_filename", "")
+    ref_names = st.session_state.get("ref_filenames", [])
     st.divider()
 
     # 요약
@@ -775,7 +775,7 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
     for i, (prod, col) in enumerate(zip(products, prod_cols)):
         with col:
             fname = prod.get("file_name", "")
-            is_ref = (fname == ref_name) or (i == 0 and ref_name == "")
+            is_ref = (fname in ref_names) or (i == 0 and not ref_names)
             badge_class = "badge-ref" if is_ref else "badge-cmp"
             badge_text  = t["ref_badge"] if is_ref else t["cmp_badge"]
             with st.container(border=True):
