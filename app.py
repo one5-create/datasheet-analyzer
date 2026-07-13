@@ -77,6 +77,7 @@ T = {
         "item_label": "항목",
         "ref_label": "기준품",
         "ref_hint": "현재 회로에 실제 사용 중인 부품을 업로드하세요 (1개 이상)",
+        "manufacturer": "제조사",
         "ref_badge": "📌 기준품",
         "cmp_label": "비교품",
         "cmp_hint": "교체 검토 중인 후보 부품을 업로드하세요 (1개 이상)",
@@ -146,6 +147,7 @@ T = {
         "item_label": "Item",
         "ref_label": "Reference",
         "ref_hint": "Currently used in the circuit — upload one or more files",
+        "manufacturer": "Manufacturer",
         "ref_badge": "📌 Reference",
         "cmp_label": "Comparison",
         "cmp_hint": "Replacement candidates — upload one or more files",
@@ -447,6 +449,15 @@ def build_excel_report(result: dict, lang_key: str) -> bytes:
         _col_hdr(ws2, r, i + 2, prod.get("product_name", prod.get("file_name", f"Product {i+1}")))
     ws2.freeze_panes = "A3"
 
+    # 제조사 행
+    r = ws2.max_row + 1
+    _sec_row(ws2, r, ncols2, t["manufacturer"])
+    r = ws2.max_row + 1
+    _data(ws2, r, 1, t["manufacturer"], row_idx=0, bold=True, fill=F_KEY)
+    for i, prod in enumerate(products):
+        _data(ws2, r, i + 2, prod.get("manufacturer", "-"), row_idx=0)
+    ws2.row_dimensions[r].height = 22
+
     for section_key, section_label in [
         ("key_specs",   t["key_specs"].replace("**", "")),
         ("performance", t["performance"].replace("**", "")),
@@ -590,7 +601,7 @@ def build_markdown_report(result: dict, lang_key: str) -> str:
     lines = [f"# {t['main_title']}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"]
     lines.append(f"## {t['summary'].replace('📝 ','')}\n{result.get('summary','-')}\n")
     for prod in result.get("products", []):
-        lines.append(f"## {prod.get('product_name', prod.get('file_name','-'))}\n**{t['file_label']}**: {prod.get('file_name','-')}\n")
+        lines.append(f"## {prod.get('product_name', prod.get('file_name','-'))}\n**{t['manufacturer']}**: {prod.get('manufacturer', '-')}  |  **{t['file_label']}**: {prod.get('file_name','-')}\n")
         if prod.get("key_specs"):
             lines.append(f"### {t['key_specs'].replace('**','')}\n" + "\n".join(f"- **{k}**: {v}" for k,v in prod["key_specs"].items()) + "\n")
         if prod.get("performance"):
@@ -784,7 +795,8 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
                     f'<strong>📄 {prod.get("product_name", fname)}</strong>',
                     unsafe_allow_html=True,
                 )
-                st.caption(f"{t['file_label']}: {fname}")
+                mfr = prod.get("manufacturer", "")
+                st.caption(f"🏭 {t['manufacturer']}: {mfr}  |  {t['file_label']}: {fname}")
                 if prod.get("key_specs"):
                     st.markdown(t["key_specs"])
                     for k, v in prod["key_specs"].items(): st.markdown(f"- `{k}`: {v}")

@@ -40,6 +40,7 @@ Output MUST follow this exact JSON schema:
     {{
       "file_name": "filename",
       "product_name": "product name (inferred)",
+      "manufacturer": "manufacturer / brand name (inferred from datasheet, e.g. Texas Instruments, STMicroelectronics, Samsung, etc. Write 'Unknown' if not found)",
       "key_specs": {{"spec name": "value"}},
       "performance": {{"metric name": "value"}},
       "highlights": ["key feature 1", "key feature 2"]
