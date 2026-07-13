@@ -790,8 +790,28 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
             badge_class = "badge-ref" if is_ref else "badge-cmp"
             badge_text  = t["ref_badge"] if is_ref else t["cmp_badge"]
             with st.container(border=True):
+                # ── 역할 구분 컬러 배너 ──────────────────────
+                if is_ref:
+                    st.markdown(
+                        '<div style="background:linear-gradient(90deg,#1565C0,#1976D2);'
+                        'color:white;padding:7px 12px;border-radius:6px;'
+                        'font-weight:800;font-size:0.88rem;margin-bottom:8px">'
+                        f'📌 {t["ref_label"]} — '
+                        f'{"현재 사용 중인 부품" if lang_key=="ko" else "Currently in use"}'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        '<div style="background:linear-gradient(90deg,#E65100,#F57C00);'
+                        'color:white;padding:7px 12px;border-radius:6px;'
+                        'font-weight:800;font-size:0.88rem;margin-bottom:8px">'
+                        f'🔍 {t["cmp_label"]} — '
+                        f'{"교체 후보 부품" if lang_key=="ko" else "Replacement candidate"}'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
                 st.markdown(
-                    f'<span class="{badge_class}">{badge_text}</span> '
                     f'<strong>📄 {prod.get("product_name", fname)}</strong>',
                     unsafe_allow_html=True,
                 )
@@ -812,7 +832,13 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
     if table:
         st.subheader(t["comparison"])
         fns = list(table[0]["values"].keys())
-        rows = [{t["item_label"]: row["category"], **{fn: row["values"].get(fn,"-") for fn in fns}} for row in table]
+        # 컬럼명에 📌 기준품 / 🔍 비교품 역할 레이블 추가
+        def _col_label(fn):
+            if fn in ref_names:
+                return f"📌 {fn} ({t['ref_label']})"
+            return f"🔍 {fn} ({t['cmp_label']})"
+        col_map = {fn: _col_label(fn) for fn in fns}
+        rows = [{t["item_label"]: row["category"], **{col_map[fn]: row["values"].get(fn,"-") for fn in fns}} for row in table]
         df = pd.DataFrame(rows).set_index(t["item_label"])
         st.dataframe(df, use_container_width=True, height=min(40*len(df)+50, 600))
 
