@@ -91,6 +91,11 @@ T = {
         "schematic_badge": "🔌 회로도",
         "parsing_image": "🖼️ `{}` 회로도 읽는 중...",
         "parsing_image_done": "✅ `{}` 완료",
+        "prev_result_title": "✅ 이전 분석 결과가 있습니다",
+        "prev_result_hint": "파일을 다시 업로드하지 않아도 아래에서 결과를 확인하고 다운로드할 수 있습니다.",
+        "session_warning": "⚠️ 페이지 새로고침 또는 서버 재시작 시 결과가 사라집니다. 지금 바로 다운로드하세요.",
+        "btn_clear": "🗑️ 결과 초기화",
+        "download_warning": "⚠️ 서버 재시작 시 결과가 초기화됩니다 — 지금 저장해 두세요.",
         "compat_verdict": {
             "Drop-in Compatible": "✅ 즉시 대체 가능 (Drop-in)",
             "Conditionally Replaceable": "⚠️ 조건부 대체 가능",
@@ -166,6 +171,11 @@ T = {
         "schematic_badge": "🔌 Schematic",
         "parsing_image": "🖼️ Reading `{}` schematic...",
         "parsing_image_done": "✅ `{}` done",
+        "prev_result_title": "✅ Previous analysis result is available",
+        "prev_result_hint": "You can review and download the result below without re-uploading files.",
+        "session_warning": "⚠️ Results are lost on page refresh or server restart. Download now.",
+        "btn_clear": "🗑️ Clear Results",
+        "download_warning": "⚠️ Results will be lost on server restart — save them now.",
         "compat_verdict": {
             "Drop-in Compatible": "✅ Drop-in Compatible",
             "Conditionally Replaceable": "⚠️ Conditionally Replaceable",
@@ -730,10 +740,28 @@ with st.container(border=True):
 uploaded_files = (ref_files or []) + (cmp_files or [])
 
 if not uploaded_files:
-    st.info(t["info_upload"])
     if st.session_state.result:
-        st.info("💡 이전 분석 결과가 아래에 표시됩니다." if lang_key == "ko" else "💡 Previous analysis result is shown below.")
+        # 파일 없지만 이전 결과 존재 → 프론티로 표시
+        col_banner, col_clear = st.columns([4, 1])
+        with col_banner:
+            st.markdown(
+                f'<div style="background:#E8F5E9;border-left:5px solid #43A047;'
+                f'padding:12px 16px;border-radius:8px;">'
+                f'<strong>{t["prev_result_title"]}</strong><br>'
+                f'<span style="font-size:0.88rem;color:#555">{t["prev_result_hint"]}</span><br>'
+                f'<span style="font-size:0.82rem;color:#E65100">{t["session_warning"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with col_clear:
+            if st.button(t["btn_clear"], use_container_width=True):
+                st.session_state.result = None
+                st.session_state.ref_filenames = []
+                st.session_state.circuit_image_names = []
+                st.rerun()
+        st.info(t["info_upload"])
     else:
+        st.info(t["info_upload"])
         st.stop()
 elif not ref_files:
     st.warning(t["warn_ref"]); st.stop()
@@ -965,6 +993,7 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
             file_name=f"datasheet_report_{timestamp}.md",
             mime="text/markdown", use_container_width=True,
         )
+    st.caption(t["download_warning"])
 
 render_result(st.session_state.result, t, lang_key, show_raw)
 
