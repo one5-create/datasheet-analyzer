@@ -935,10 +935,26 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
                         pass
         if isinstance(parsed, dict) and "raw_response" not in parsed:
             result = parsed
-            st.session_state.result = result   # 수정된 결과 저장
+            st.session_state.result = result
         else:
-            st.warning("⚠️ AI 응답을 구조화된 형식으로 파싱하지 못했습니다. 아래는 원문입니다.")
-            st.text(raw)
+            # ── 진단 정보 표시 ──────────────────────────────────
+            raw_clean = raw.strip('\ufeff').strip()
+            try:
+                _json.loads(raw_clean)
+            except _json.JSONDecodeError as _e:
+                ctx_s = max(0, _e.pos - 80)
+                ctx_e = min(len(raw_clean), _e.pos + 80)
+                st.error(
+                    f"🔍 JSON 파싱 실패 — "
+                    f"위치 {_e.pos}/{len(raw_clean)}자, 오류: **{_e.msg}**"
+                )
+                st.code(
+                    raw_clean[ctx_s:_e.pos] + " >>>HERE<<< " + raw_clean[_e.pos:ctx_e],
+                    language="text"
+                )
+            except Exception as _e2:
+                st.error(f"기타 오류: {_e2}")
+            st.text(raw_clean[:3000])
             return
 
     ref_names = st.session_state.get("ref_filenames", [])
