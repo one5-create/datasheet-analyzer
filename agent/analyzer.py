@@ -1,5 +1,6 @@
 """Google Gemini API를 사용한 Data Sheet 비교 분석 에이전트."""
 import os
+import re
 import json
 import time
 from google import genai
@@ -175,8 +176,36 @@ class DataSheetAnalyzer:
                     raise
 
         try:
-            result = json.loads(response.text)
-        except json.JSONDecodeError:
+            result = _parse_json_response(response.text)
+        except Exception:
             result = {"raw_response": response.text}
 
         return result
+
+
+def _parse_json_response(text: str) -> dict:
+    """Gemini 응답에서 JSON을 추출합니다 (다양한 포맷 대응)."""
+    # 1차: 직접 파싱
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2차: 마크다운 코드 블록 (```json ... ```) 제거
+    code_block = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+    if code_block:
+        try:
+            return json.loads(code_block.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # 3차: 첫 번째 { ... } 스니펫 추출
+    brace_match = re.search(r'\{[\s\S]*\}', text)
+    if brace_match:
+        try:
+            return json.loads(brace_match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # 모든 시도 실패 시 원시 텍스트 반환
+    return {"raw_response": text}

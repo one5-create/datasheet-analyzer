@@ -855,8 +855,29 @@ else:
 def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
     if not result:
         return
+    # raw_response 가 있더라도 유효한 JSON 이면 재파싱 시도
     if "raw_response" in result:
-        st.markdown(result["raw_response"]); return
+        import json as _json, re as _re
+        raw = result["raw_response"]
+        parsed = None
+        for attempt_text in [raw, _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=_re.S)]:
+            try:
+                parsed = _json.loads(attempt_text)
+                break
+            except Exception:
+                m = _re.search(r'\{[\s\S]*\}', attempt_text)
+                if m:
+                    try:
+                        parsed = _json.loads(m.group()); break
+                    except Exception:
+                        pass
+        if isinstance(parsed, dict) and "raw_response" not in parsed:
+            result = parsed
+            st.session_state.result = result   # 수정된 결과 저장
+        else:
+            st.warning("⚠️ AI 응답을 구조화된 형식으로 파싱하지 못했습니다. 아래는 원문입니다.")
+            st.text(raw)
+            return
 
     ref_names = st.session_state.get("ref_filenames", [])
     st.divider()
