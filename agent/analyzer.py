@@ -164,6 +164,7 @@ class DataSheetAnalyzer:
                     config=types.GenerateContentConfig(
                         temperature=0.2,
                         response_mime_type="application/json",
+                        max_output_tokens=65536,
                     ),
                 )
                 break
@@ -185,6 +186,9 @@ class DataSheetAnalyzer:
 
 def _parse_json_response(text: str) -> dict:
     """Gemini 응답에서 JSON을 추출합니다 (다양한 포맷 대응)."""
+    # BOM 및 선행/후행 공백 제거
+    text = text.strip('\ufeff').strip()
+
     # 1차: 직접 파싱
     try:
         return json.loads(text)
@@ -195,11 +199,11 @@ def _parse_json_response(text: str) -> dict:
     code_block = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
     if code_block:
         try:
-            return json.loads(code_block.group(1))
+            return json.loads(code_block.group(1).strip('\ufeff').strip())
         except json.JSONDecodeError:
             pass
 
-    # 3차: 첫 번째 { ... } 스니펫 추출
+    # 3차: 첫 { } 추출
     brace_match = re.search(r'\{[\s\S]*\}', text)
     if brace_match:
         try:
@@ -207,5 +211,23 @@ def _parse_json_response(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    # 모든 시도 실패 시 원시 텍스트 반환
+    # 4차: JSON이 중간에 잘린 경우 — 열린 괄호/대괄호를 닫아 복구 시도
+    fragment = brace_match.group() if brace_match else text
+    stack, result_chars = [], []
+    for ch in fragment:
+        result_chars.append(ch)
+        if ch in ('{', '['):
+            stack.append(ch)
+        elif ch == '}' and stack and stack[-1] == '{':
+            stack.pop()
+        elif ch == ']' and stack and stack[-1] == '[':
+            stack.pop()
+    # 닫히지 않은 괄호 지운
+    for opener in reversed(stack):
+        result_chars.append('}' if opener == '{' else ']')
+    try:
+        return json.loads(''.join(result_chars))
+    except json.JSONDecodeError:
+        pass
+
     return {"raw_response": text}
