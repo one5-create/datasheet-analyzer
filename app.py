@@ -937,7 +937,18 @@ def render_result(result: dict, t: dict, lang_key: str, show_raw: bool):
             result = parsed
             st.session_state.result = result
         else:
-            # ── 진단 정보 표시 ──────────────────────────────────
+            # json-repair 우선 시도
+            try:
+                from json_repair import repair_json as _repair
+                _fixed = _repair(raw, return_objects=True)
+                if isinstance(_fixed, dict) and "raw_response" not in _fixed:
+                    result = _fixed
+                    st.session_state.result = result
+                    st.rerun()
+                    return
+            except Exception:
+                pass
+            # 진단 정보 표시
             raw_clean = raw.strip('\ufeff').strip()
             try:
                 _json.loads(raw_clean)

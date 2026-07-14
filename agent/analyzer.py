@@ -3,6 +3,10 @@ import os
 import re
 import json
 import time
+try:
+    from json_repair import repair_json as _repair_json
+except ImportError:
+    _repair_json = None
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
@@ -207,7 +211,16 @@ def _parse_json_response(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 2차: 마크다운 코드 블록 (```json ... ```) 제거
+    # 2차: json-repair 라이브러리로 자동 복구 (없는 콤마 등 수정)
+    if _repair_json is not None:
+        try:
+            repaired = _repair_json(text, return_objects=True)
+            if isinstance(repaired, dict):
+                return repaired
+        except Exception:
+            pass
+
+    # 3차: 마크다운 코드 블록 (```json ... ```) 제거
     code_block = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
     if code_block:
         try:
