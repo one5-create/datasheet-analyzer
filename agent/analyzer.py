@@ -65,6 +65,15 @@ Output MUST follow this exact JSON schema:
     "cautions": ["specific caution or failure risk if substituted carelessly"],
     "performance_impact": ["performance change when substituted, e.g. '5% efficiency drop at high frequency'"]
   }},
+  "circuit_analysis": {{
+    "provided": false,
+    "component_locations": ["where the reference component appears in the schematic (e.g. U1, Q3)"],
+    "surrounding_components": ["key passive/active components directly connected to the reference part (values, types)"],
+    "circuit_constraints": ["circuit-level constraints visible in the schematic that affect substitution"],
+    "layout_notes": ["PCB layout or routing observations relevant to substitution"],
+    "schematic_based_modifications": ["additional modifications identified FROM the schematic that are NOT obvious from datasheet alone"],
+    "overall_circuit_assessment": "One-paragraph assessment of substitution feasibility based purely on the schematic review"
+  }},
   "recommendation": "Overall analysis and substitution recommendation"
 }}
 
@@ -128,15 +137,18 @@ class DataSheetAnalyzer:
             circuit_section = (
                 f"\n\n--- Circuit Diagram(s): {names} ---\n"
                 "The circuit diagram image(s) are attached to this message.\n"
-                "Using the circuit diagram(s), perform ADDITIONAL analysis:\n"
-                "- Identify which component position(s) correspond to the REFERENCE part\n"
-                "- Evaluate whether the COMPARISON part(s) can replace them IN THIS EXACT CIRCUIT\n"
-                "- Note any circuit-level constraints visible in the schematic "
-                "(voltage rails, surrounding passives, feedback paths, thermal layout, etc.)\n"
-                "- Revise or add to circuit_modifications_required and cautions based on the schematic"
+                "Populate the \"circuit_analysis\" field in your JSON output with:\n"
+                "- \"provided\": true\n"
+                "- \"component_locations\": where the REFERENCE component appears in the schematic\n"
+                "- \"surrounding_components\": directly connected passives/actives with values\n"
+                "- \"circuit_constraints\": constraints visible in schematic affecting substitution\n"
+                "- \"layout_notes\": PCB/routing observations\n"
+                "- \"schematic_based_modifications\": extra mods identified ONLY from schematic\n"
+                "- \"overall_circuit_assessment\": one-paragraph schematic-based feasibility summary\n"
+                "Also revise circuit_modifications_required and cautions in interchangeability based on the schematic."
             )
         else:
-            circuit_section = ""
+            circuit_section = "\nNo circuit diagram provided. Set circuit_analysis.provided = false and leave other circuit_analysis fields empty."
 
         prompt = ANALYSIS_PROMPT.format(
             count=len(parsed_files),

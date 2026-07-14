@@ -96,6 +96,14 @@ T = {
         "session_warning": "⚠️ 페이지 새로고침 또는 서버 재시작 시 결과가 사라집니다. 지금 바로 다운로드하세요.",
         "btn_clear": "🗑️ 결과 초기화",
         "download_warning": "⚠️ 서버 재시작 시 결과가 초기화됩니다 — 지금 저장해 두세요.",
+        "circuit_title": "회로도 기반 분석",
+        "circuit_no_data": "회로도가 업로드되지 않았습니다. 회로도를 업로드하면 실제 회로 수준의 세밀 분석을 제공합니다.",
+        "circuit_locations": "회로상 부품 위치",
+        "circuit_surrounding": "주변 부품",
+        "circuit_constraints": "회로 제약 사항",
+        "circuit_layout": "PCB 레이아웃 주의사항",
+        "circuit_mods_schematic": "회로도 기반 추가 수정 사항",
+        "circuit_assessment": "회로도 종합 평가",
         "compat_verdict": {
             "Drop-in Compatible": "✅ 즉시 대체 가능 (Drop-in)",
             "Conditionally Replaceable": "⚠️ 조건부 대체 가능",
@@ -176,6 +184,14 @@ T = {
         "session_warning": "⚠️ Results are lost on page refresh or server restart. Download now.",
         "btn_clear": "🗑️ Clear Results",
         "download_warning": "⚠️ Results will be lost on server restart — save them now.",
+        "circuit_title": "Schematic-Based Analysis",
+        "circuit_no_data": "No circuit diagram was uploaded. Upload a schematic for circuit-level analysis.",
+        "circuit_locations": "Component Locations",
+        "circuit_surrounding": "Surrounding Components",
+        "circuit_constraints": "Circuit Constraints",
+        "circuit_layout": "PCB Layout Notes",
+        "circuit_mods_schematic": "Schematic-Based Modifications",
+        "circuit_assessment": "Overall Circuit Assessment",
         "compat_verdict": {
             "Drop-in Compatible": "✅ Drop-in Compatible",
             "Conditionally Replaceable": "⚠️ Conditionally Replaceable",
@@ -601,6 +617,36 @@ def build_excel_report(result: dict, lang_key: str) -> bytes:
     _list_section(ws4, t["performance_impact"].replace("📊 ", ""),
                   ix.get("performance_impact", []), 2)
 
+    # ══════════════════════════════════════════════════════
+    # Sheet 5: 회로도 기반 분석
+    # ══════════════════════════════════════════════════════
+    ca = result.get("circuit_analysis", {})
+    if ca and ca.get("provided"):
+        ws5 = wb.create_sheet("Schematic Analysis" if lang_key == "en" else "회로도 분석")
+        ws5.column_dimensions["A"].width = 28
+        ws5.column_dimensions["B"].width = 80
+        ws5.sheet_view.showGridLines = False
+        _title_row(ws5, 1, 2, t["circuit_title"])
+        r = 2
+        _sec_row(ws5, r, 2, t["circuit_assessment"])
+        r = 3
+        c_ca = ws5.cell(row=r, column=1, value=ca.get("overall_circuit_assessment", "-"))
+        ws5.merge_cells(f"A{r}:B{r}")
+        c_ca.fill = PatternFill("solid", fgColor="E8F5E9")
+        c_ca.font = Font(size=10)
+        c_ca.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
+        c_ca.border = Border(left=Side(style="medium", color="2E7D32"), right=thin, top=thin, bottom=thin)
+        ws5.row_dimensions[r].height = 80
+        for key, label in [
+            ("component_locations",      t["circuit_locations"]),
+            ("surrounding_components",   t["circuit_surrounding"]),
+            ("circuit_constraints",      t["circuit_constraints"]),
+            ("layout_notes",             t["circuit_layout"]),
+            ("schematic_based_modifications", t["circuit_mods_schematic"]),
+        ]:
+            _list_section(ws5, label, ca.get(key, []), 2)
+        ws5.sheet_properties.tabColor = "2E7D32"
+
     # ── 시트 탭 색상 ─────────────────────────────────────
     ws1.sheet_properties.tabColor = "1565C0"
     ws2.sheet_properties.tabColor = "0288D1"
@@ -638,8 +684,8 @@ def build_markdown_report(result: dict, lang_key: str) -> str:
             lines.append(f"| {row['category']} | " + " | ".join(str(row["values"].get(fn,"-")) for fn in fns) + " |\n")
     ix = result.get("interchangeability", {})
     if ix:
+        verdict_raw = ix.get("verdict", "")
         lines.append(f"\n## {t['compatibility'].replace('🔗 ','')}\n")
-        verdict_raw = ix.get("verdict","")
         lines.append(f"- **{t['verdict']}**: {t['compat_verdict'].get(verdict_raw, verdict_raw)}\n")
         lines.append(f"- **{t['risk_level']}**: {ix.get('risk_level','-')}\n")
         lines.append(f"- **{t['substitutable']}**: {t['possible'] if ix.get('substitutable') else t['not_possible']}\n")
@@ -655,6 +701,22 @@ def build_markdown_report(result: dict, lang_key: str) -> str:
             items = ix.get(key, [])
             if items:
                 lines.append(f"\n### {label.replace('⚠️ ','').replace('📊 ','')}\n" + "\n".join(f"- {i}" for i in items) + "\n")
+    # 회로도 기반 분석 섹션
+    ca = result.get("circuit_analysis", {})
+    if ca and ca.get("provided"):
+        lines.append(f"\n## 🔌 {t['circuit_title']}\n")
+        if ca.get("overall_circuit_assessment"):
+            lines.append(f"{ca['overall_circuit_assessment']}\n")
+        for key, label in [
+            ("component_locations",      t["circuit_locations"]),
+            ("surrounding_components",   t["circuit_surrounding"]),
+            ("circuit_constraints",      t["circuit_constraints"]),
+            ("layout_notes",             t["circuit_layout"]),
+            ("schematic_based_modifications", t["circuit_mods_schematic"]),
+        ]:
+            items = ca.get(key, [])
+            if items:
+                lines.append(f"\n### {label}\n" + "\n".join(f"- {i}" for i in items) + "\n")
     if result.get("recommendation"):
         lines.append(f"\n## {t['recommendation'].replace('💡 ','')}\n{result['recommendation']}\n")
     return "\n".join(lines)
